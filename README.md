@@ -68,7 +68,8 @@ projects/fraud-detection/
 ├── fraud_data.csv
 ├── requirements.txt
 ├── README.md
-├── config.py           # Dataclass config (paths, k, split, seed, device)
+├── README-PL.md        # Polish description
+├── config.py           # Dataclass config (paths, k, split, seed, device, visualization)
 ├── data/
 │   ├── dataset.py      # Load CSV, normalize, split, build PyG Data
 │   └── graph_builder.py # k-NN graph from feature matrix
@@ -77,8 +78,10 @@ projects/fraud-detection/
 │   └── baseline_mlp.py # MLP baseline (FraudMLP)
 ├── training/
 │   ├── metrics.py      # Precision, recall, F1, AUC-ROC, confusion matrix
-│   └── trainer.py      # Train/val loop, early stopping, BCEWithLogitsLoss
-└── run.py              # Entry point: load → train both → compare
+│   └── trainer.py      # Train/val loop, early stopping, BCEWithLogitsLoss + history
+├── visualization/
+│   └── plots.py        # Matplotlib/seaborn plots (curves, confusion, ROC/PR, graph, etc.)
+└── run.py              # Entry point: load → train both → compare → (optionally) plot
 ```
 
 ## Dependencies

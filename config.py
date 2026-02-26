@@ -80,12 +80,30 @@ class TrainingConfig:
 
 
 @dataclass(frozen=True)
+class VisualizationConfig:
+    """Settings for Matplotlib-based visualizations and output paths."""
+
+    # Where to save generated plots (relative to project root).
+    plots_dir: Path = field(default_factory=lambda: _PROJECT_ROOT / "outputs" / "plots")
+
+    # Where to save serialized training histories / metrics (for notebooks).
+    metrics_dir: Path = field(default_factory=lambda: _PROJECT_ROOT / "outputs" / "metrics")
+
+    # Toggle to enable/disable plotting from run.py.
+    enable_plots: bool = True
+
+    # Default figure size for plots (width, height) in inches.
+    figsize: Tuple[float, float] = (8.0, 6.0)
+
+
+@dataclass(frozen=True)
 class Config:
-    """Top-level config aggregating data, model, and training settings."""
+    """Top-level config aggregating data, model, training, and visualization settings."""
 
     data: DataConfig = field(default_factory=DataConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
+    visualization: VisualizationConfig = field(default_factory=VisualizationConfig)
 
     @classmethod
     def from_defaults(cls) -> "Config":

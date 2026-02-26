@@ -1,9 +1,10 @@
 """
 Training loop for GNN and MLP: same interface, BCEWithLogitsLoss with pos_weight,
 early stopping on validation metric, and evaluation on test set.
+Also tracks training history for visualization.
 """
 
-from typing import Callable, Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
@@ -59,6 +60,19 @@ class Trainer:
         self.criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
         self.optimizer = Adam(model.parameters(), lr=lr)
 
+        # Per-epoch training history for visualization.
+        self._reset_history()
+
+    def _reset_history(self) -> None:
+        self.history: Dict[str, list] = {
+            "epoch": [],
+            "train_loss": [],
+            "val_loss": [],
+            "val_f1": [],
+            "val_precision": [],
+            "val_recall": [],
+        }
+
     def train_epoch(self) -> float:
         """One training epoch; returns average training loss."""
         self.model.train()
@@ -80,6 +94,16 @@ class Trainer:
         y_pred, y_prob = logits_to_pred_and_prob(logits_m)
         return compute_metrics(y_true, y_pred, y_prob)
 
+    @torch.no_grad()
+    def compute_loss(self, mask: torch.Tensor) -> float:
+        """Compute BCE loss on nodes where mask is True."""
+        self.model.eval()
+        logits = self.model(self.data)
+        logits_m = logits[mask]
+        y_true = self.data.y[mask]
+        loss = self.criterion(logits_m, y_true)
+        return float(loss.item())
+
     def run(self) -> Dict[str, float]:
         """
         Full training with early stopping on validation F1.
@@ -89,10 +113,22 @@ class Trainer:
         best_state: Optional[Dict] = None
         epochs_no_improve = 0
 
+        # Reset history in case the same Trainer is reused.
+        self._reset_history()
+
         for epoch in range(self.max_epochs):
             train_loss = self.train_epoch()
             val_metrics = self.evaluate(self.data.val_mask)
+            val_loss = self.compute_loss(self.data.val_mask)
             val_f1 = val_metrics["f1"]
+
+            # Store history for this epoch.
+            self.history["epoch"].append(epoch + 1)
+            self.history["train_loss"].append(train_loss)
+            self.history["val_loss"].append(val_loss)
+            self.history["val_f1"].append(val_f1)
+            self.history["val_precision"].append(val_metrics["precision"])
+            self.history["val_recall"].append(val_metrics["recall"])
 
             if val_f1 > best_val_f1:
                 best_val_f1 = val_f1
@@ -103,8 +139,9 @@ class Trainer:
 
             if (epoch + 1) % 20 == 0 or epoch == 0:
                 print(
-                    f"  Epoch {epoch + 1:3d}  loss={train_loss:.4f}  val_f1={val_f1:.4f}  "
-                    f"val_recall={val_metrics['recall']:.4f}  val_precision={val_metrics['precision']:.4f}"
+                    f"  Epoch {epoch + 1:3d}  loss={train_loss:.4f}  val_loss={val_loss:.4f}  "
+                    f"val_f1={val_f1:.4f}  val_recall={val_metrics['recall']:.4f}  "
+                    f"val_precision={val_metrics['precision']:.4f}"
                 )
 
             if epochs_no_improve >= self.patience:
@@ -116,6 +153,28 @@ class Trainer:
             self.model.load_state_dict(best_state)
         test_metrics = self.evaluate(self.data.test_mask)
         return test_metrics
+
+    def get_history(self) -> Dict[str, list]:
+        """Return per-epoch training history collected during run()."""
+        return self.history
+
+    @torch.no_grad()
+    def get_test_predictions(self) -> Dict[str, np.ndarray]:
+        """
+        Return test-set true labels, binary predictions, and probabilities
+        for the positive (fraud) class, using the current model state.
+        """
+        self.model.eval()
+        logits = self.model(self.data)
+        mask = self.data.test_mask
+        logits_m = logits[mask]
+        y_true = self.data.y[mask].cpu().numpy().ravel().astype(np.int64)
+        y_pred, y_prob = logits_to_pred_and_prob(logits_m)
+        return {
+            "y_true": y_true,
+            "y_pred": y_pred.astype(np.int64),
+            "y_prob": y_prob.astype(np.float32),
+        }
 
     def test_confusion_matrix(self) -> np.ndarray:
         """Return confusion matrix on test set (after run())."""
